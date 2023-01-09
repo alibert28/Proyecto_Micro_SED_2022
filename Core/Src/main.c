@@ -24,6 +24,7 @@
 /* USER CODE BEGIN Includes */
 #include "usbd_cdc_if.h"
 #include "string.h"
+#include "stdio.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,6 +42,8 @@ typedef enum{
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 #define DEBOUNCE_DELAY 50
+
+#define LDR_umbral 100
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -57,12 +60,12 @@ TIM_HandleTypeDef htim5;
 
 /* USER CODE BEGIN PV */
 
+uint8_t ADC_val;
+
 volatile int minutos = 0;
 volatile int horas = 0;
 volatile int tiempo_min = 0;
 volatile int tiempo_hor = 0;
-//volatile int fin_de_carrera_min = 0;
-//volatile int fin_de_carrera_hor = 0;
 volatile int contando = 0;
 
 uint8_t buffer[64]; //Para recibir lo que el terminal envia al micro
@@ -77,7 +80,6 @@ char* str_ENCENDER_POR = "ENCENDER POR";
 char* str_APAGAR = "APAGAR";
 
 volatile int last_interrupt_time = 0;
-
 
 /* USER CODE END PV */
 
@@ -153,8 +155,6 @@ void displayModo(int k){
 	CDC_Transmit_FS(data, sizeof(data));
 }
 
-
-
 void Delay(uint16_t time)
 {
 	__HAL_TIM_SET_COUNTER(&htim5,0);
@@ -163,30 +163,51 @@ void Delay(uint16_t time)
 
 void Display_Temp(float Temp)
 {
-//	char str[20] = {0};
-//	lcd_put_cur(0, 0);
-//
-//	sprintf (str, "TEMP:- %.2f ", Temp);
-//	lcd_send_string(str);
-//	lcd_send_data('C');
+	int i;
+	char str[30] = {0};
+	sprintf (str, "TEMP:- %.2f ", Temp);
+	strcat(str,"\r\n");
+	uint8_t data[sizeof(str)];
+	for(i = 0;i<=sizeof(str);i++){
+	  data[i] = str[i];
+	};
+	CDC_Transmit_FS(data, sizeof(data));
+	//CDC_Transmit_FS({'C','\r','\n'},3);
 }
 
 void Display_Rh (float Rh)
 {
-//	char str[20] = {0};
-//	lcd_put_cur(1, 0);
-//
-//	sprintf (str, "RH:- %.2f ", Rh);
-//	lcd_send_string(str);
-//	lcd_send_data('%');
+	int i;
+	char str[30] = {0};
+	sprintf (str, "RH:- %.2f ", Rh);
+	strcat(str,"\r\n");
+	uint8_t data[sizeof(str)];
+	for(i = 0;i<=sizeof(str);i++){
+	  data[i] = str[i];
+	};
+	CDC_Transmit_FS(data, sizeof(data));
+	//CDC_Transmit_FS("%\r\n");
+}
+
+void Display_Luz(uint8_t Luz){
+	int i;
+	char str[30] = {0};
+	sprintf (str, "Luz:- %d ", Luz);
+	strcat(str,"\r\n");
+	uint8_t data[sizeof(str)];
+	for(i = 0;i<=sizeof(str);i++){
+	  data[i] = str[i];
+	};
+	CDC_Transmit_FS(data, sizeof(data));
+	//CDC_Transmit_FS("\r\n");
 }
 
 uint8_t Rh_byte1, Rh_byte2, Temp_byte1, Temp_byte2;
 uint16_t SUM, RH, TEMP;
 
-float Temperature = 0;
-float Humidity = 0;
-uint8_t Presence = 0;
+volatile float Temperature = 0;
+volatile float Humidity = 0;
+volatile uint8_t Presence = 0;
 
 void Set_Pin_Output (GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
 {
@@ -231,7 +252,7 @@ uint8_t DHT11_Check_Response (void)
 		if ((HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN))) Response = 1;
 		else Response = -1; // 255
 	}
-	while ((HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN)));   // wait for the pin to go low
+	while ((HAL_GPIO_ReadPin(DHT11_PORT, DHT11_PIN)));   // wait for the pin to go low
 
 	return Response;
 }
@@ -290,6 +311,7 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   state_machine_init();
+  HAL_TIM_Base_Start(&htim5);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -575,9 +597,29 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-void LimpiarProcesos(){
-	minutos = 0;
-	memset(&buffer[0], 0, sizeof(buffer));
+void MedirSensores(){
+	//DATOS DE LUZ
+	HAL_ADC_Start(&hadc1);
+	if (HAL_ADC_PollForConversion(&hadc1, 100) == HAL_OK)
+	{
+	ADC_val = HAL_ADC_GetValue(&hadc1);
+	}
+	HAL_ADC_Stop(&hadc1);
+
+	//HUMEDAD Y TEMPERATURA
+//	DHT11_Start();
+//	//Presence = DHT11_Check_Response();
+//	Rh_byte1 = DHT11_Read ();
+//	Rh_byte2 = DHT11_Read ();
+//	Temp_byte1 = DHT11_Read ();
+//	Temp_byte2 = DHT11_Read ();
+//	SUM = DHT11_Read();
+//
+//	TEMP = Temp_byte1;
+//	RH = Rh_byte1;
+//
+//	Temperature = (float) TEMP;
+//	Humidity = (float) RH;
 }
 
 void state_machine_init(void){
@@ -696,7 +738,12 @@ void AUTOMATICO_function(void){
 	char *sM = strstr((char*)buffer,str_MANUAL);
 	char *sH = strstr((char*)buffer,str_HORARIO);
 	//Funcionamiento del modo automático
-
+	MedirSensores();
+	//MOSTRAR LOS DATOS
+	Display_Temp(Temperature);
+	Display_Rh(Humidity);
+	Display_Luz(ADC_val);
+	HAL_Delay(1000);
 	//
 	if(btn_pressed == 1){
 		btn_pressed = 0;
@@ -734,7 +781,6 @@ void APAGADO_function(void){
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
 	Current_State = ESPERA;
 }
-
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
