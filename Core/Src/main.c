@@ -740,10 +740,6 @@ void AUTOMATICO_function(void){
 	//Funcionamiento del modo automático
 	MedirSensores();
 	//MOSTRAR LOS DATOS
-	Display_Temp(Temperature);
-	Display_Rh(Humidity);
-	Display_Luz(ADC_val);
-	HAL_Delay(1000);
 	//
 	if(btn_pressed == 1){
 		btn_pressed = 0;

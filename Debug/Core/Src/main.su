@@ -23,8 +23,8 @@
 ../Core/Src/main.c:661:6:MANUAL_function	40	static
 ../Core/Src/main.c:702:6:HORARIO_function	24	static
 ../Core/Src/main.c:735:6:AUTOMATICO_function	24	static
-../Core/Src/main.c:773:6:ENCENDIDO_function	16	static
-../Core/Src/main.c:780:6:APAGADO_function	8	static
-../Core/Src/main.c:785:6:HAL_TIM_PeriodElapsedCallback	16	static
-../Core/Src/main.c:804:6:HAL_GPIO_EXTI_Callback	24	static
-../Core/Src/main.c:824:6:Error_Handler	4	static,ignoring_inline_asm
+../Core/Src/main.c:769:6:ENCENDIDO_function	16	static
+../Core/Src/main.c:776:6:APAGADO_function	8	static
+../Core/Src/main.c:781:6:HAL_TIM_PeriodElapsedCallback	16	static
+../Core/Src/main.c:800:6:HAL_GPIO_EXTI_Callback	24	static
+../Core/Src/main.c:820:6:Error_Handler	4	static,ignoring_inline_asm
