@@ -32,7 +32,9 @@ typedef enum{
 	ESPERA,
 	MANUAL,
 	HORARIO,
-	AUTOMATICO
+	AUTOMATICO,
+	ENCENDIDO,
+	APAGADO
 } State_Type;
 /* USER CODE END PTD */
 
@@ -48,6 +50,7 @@ typedef enum{
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim5;
@@ -56,6 +59,11 @@ TIM_HandleTypeDef htim5;
 
 volatile int minutos = 0;
 volatile int horas = 0;
+volatile int tiempo_min = 0;
+volatile int tiempo_hor = 0;
+//volatile int fin_de_carrera_min = 0;
+//volatile int fin_de_carrera_hor = 0;
+volatile int contando = 0;
 
 uint8_t buffer[64]; //Para recibir lo que el terminal envia al micro
 
@@ -86,6 +94,8 @@ void ESPERA_function(void);
 void MANUAL_function(void);
 void HORARIO_function(void);
 void AUTOMATICO_function(void);
+void ENCENDIDO_function(void);
+void APAGADO_function(void);
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 /* USER CODE END PFP */
@@ -95,37 +105,25 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin);
 
 /************************************* TIEMPO ********************************************/
 
-int tiempoTranscurridoMinutos(int tiempo){
-	int retorno = 0;
+void TemporizadorMinutos(int tiempo){
+	contando = 1;
+	minutos = 0;
+	tiempo_min = tiempo;
+	//fin_de_carrera_min = 0;
 	HAL_TIM_Base_Start_IT(&htim3);
-	if (minutos < tiempo){
-		retorno = 0;
-	}
-	else{
-		retorno = 1;
-		HAL_TIM_Base_Stop_IT(&htim3);
-		minutos = 0;
-	}
-	return retorno;
 }
 
-int tiempoTranscurridoHoras(int tiempo){
-	int retorno = 0;
+void TemporizadorHoras(int tiempo){
+	horas = 0;
+	contando = 1;
+	tiempo_hor = tiempo;
+	//fin_de_carrera_hor = 0;
 	HAL_TIM_Base_Start_IT(&htim2);
-	if (horas < tiempo){
-		retorno = 0;
-	}
-	else{
-		retorno = 1;
-		HAL_TIM_Base_Stop_IT(&htim3);
-		horas = 0;
-	}
-	return retorno;
 }
 
 /************************************* FSM ********************************************/
 
-static void (*state_table []) (void) ={ESPERA_function,MANUAL_function,HORARIO_function,AUTOMATICO_function};
+static void (*state_table []) (void) ={ESPERA_function,MANUAL_function,HORARIO_function,AUTOMATICO_function,ENCENDIDO_function,APAGADO_function};
 static State_Type Current_State;
 volatile int btn_pressed;
 
@@ -577,6 +575,11 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+void LimpiarProcesos(){
+	minutos = 0;
+	memset(&buffer[0], 0, sizeof(buffer));
+}
+
 void state_machine_init(void){
 	displayModo(ESPERA);
 	Current_State = ESPERA;
@@ -614,25 +617,20 @@ void ESPERA_function(void){
 	}
 }
 void MANUAL_function(void){
-	int apagar = 0;
 	char *s     = strstr((char*)buffer,str_CAMBIAR_A_MODO);
 	char *sE    = strstr((char*)buffer,str_ESPERA);
 	char *sH    = strstr((char*)buffer,str_HORARIO);
 	char *sA    = strstr((char*)buffer,str_AUTOMATICO);
 	char *s_ON  = strstr((char*)buffer,str_ENCENDER_POR);
-	char *s_OFF = strstr((char*)buffer,str_APAGAR);
 	//Funcionamiento del modo MANUAL
 	if(s_ON != NULL){
 		char arr_tiempo[2] = {buffer[13],buffer[14]};
-		buffer[0] = '\0';
 		int tiempo = atoi(arr_tiempo);
-		do{
-			HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 1);
-			if(s_OFF != NULL){
-				apagar = 1;
-				buffer[0] = '\0';
-			}
-		} while(tiempoTranscurridoMinutos(tiempo) == 0 && apagar == 0);
+		TemporizadorMinutos(tiempo);
+		memset(&buffer[0], 0, sizeof(buffer));
+	}
+	if(contando == 1){
+		Current_State = ENCENDIDO;
 	}
 	//
 	if(btn_pressed == 1){
@@ -698,6 +696,7 @@ void AUTOMATICO_function(void){
 	char *sM = strstr((char*)buffer,str_MANUAL);
 	char *sH = strstr((char*)buffer,str_HORARIO);
 	//Funcionamiento del modo automático
+
 	//
 	if(btn_pressed == 1){
 		btn_pressed = 0;
@@ -724,13 +723,35 @@ void AUTOMATICO_function(void){
 	}
 }
 
+void ENCENDIDO_function(void){
+	char *s_OFF = strstr((char*)buffer,str_APAGAR);
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 1);
+	if(s_OFF != NULL || contando == 0){
+		Current_State = APAGADO;
+	}
+}
+void APAGADO_function(void){
+	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_15, 0);
+	Current_State = ESPERA;
+}
+
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if(htim->Instance == TIM2){ //Horas
+		if(horas >= tiempo_hor){
+			contando = 0;
+			HAL_TIM_Base_Stop_IT(&htim2);
+			horas = 0;
+		}
 		horas++;
 	}
 	if(htim->Instance == TIM3){ //Minutos
+		if(minutos >= tiempo_min){
+			contando = 0;
+			HAL_TIM_Base_Stop_IT(&htim3);
+			minutos = 0;
+		}
 		minutos++;
 	}
 }
